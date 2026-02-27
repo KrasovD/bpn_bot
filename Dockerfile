@@ -3,12 +3,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-RUN uv sync --locked
-# Теперь код
 COPY . .
+
+RUN uv sync --locked
 
 # Чтобы логи сразу шли в stdout без буфера
 ENV PYTHONUNBUFFERED=1
 
 # Запуск
-CMD ["uv", "run", "app.main"]
+CMD ["uv", "run", "python", "-m", "app.main"]
