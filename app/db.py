@@ -2,7 +2,10 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "bot.db"
+from pathlib import Path
+
+DB_PATH = Path("/app/data/bot.db")
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 def init_db() -> None:
     with closing(sqlite3.connect(DB_PATH)) as con:
