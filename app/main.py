@@ -7,7 +7,17 @@ from aiogram.types import Message
 from app.config import settings
 from app.serverspace_api import ServerspaceAPI
 from app.vpn_texts import VPN_INSTRUCTIONS
-from app.db import init_db, add_user, get_user, list_users, remove_user, create_invite, use_invite
+from app.db import (
+    init_db,
+    add_user,
+    get_user,
+    list_users,
+    remove_user,
+    create_invite,
+    use_invite,
+    get_users_count,
+    save_balance_replenishment,
+)
 from app.filters import AuthorizedOnly, AdminOnly
 from app.invites import make_token, expires_in_hours
 
@@ -123,6 +133,8 @@ async def balance_watcher(bot: Bot):
     когда баланс ниже порога. Чтобы не спамить — троттлим повтор.
     """
     last_alert_ts: float = 0.0
+    last_balance: float | None = None
+    low_balance_observed = False
     repeat_cooldown = 60 * 60  # 1 час
 
     while True:
@@ -132,14 +144,44 @@ async def balance_watcher(bot: Bot):
             bal = float(project.get("balance", 0))
             cur = project.get("currency", "")
             thr = float(settings.LOW_BALANCE_THRESHOLD)
+            monthly_rent = float(settings.MONTHLY_RENT_COST)
+            users_count = max(get_users_count(), 1)
+            recommended_topup = round(monthly_rent / users_count, 2)
 
             now = time.time()
             if bal < thr and (now - last_alert_ts) > repeat_cooldown:
-                await bot.send_message(
-                    settings.ADMIN_CHAT_ID,
-                    f"🚨 Низкий баланс Serverspace: {bal} {cur} (порог {thr} {cur})"
+                recipients = [u["chat_id"] for u in list_users()]
+                if settings.ADMIN_CHAT_ID not in recipients:
+                    recipients.append(settings.ADMIN_CHAT_ID)
+
+                alert_text = (
+                    f"🚨 Низкий баланс Serverspace: {bal} {cur} (порог {thr} {cur})\n"
+                    f"Рекомендуемое пополнение на пользователя: {recommended_topup} {cur}\n"
+                    f"(месячная аренда {monthly_rent} {cur} / пользователей {users_count})"
                 )
+
+                for chat_id in recipients:
+                    try:
+                        await bot.send_message(chat_id, alert_text)
+                    except Exception:
+                        continue
+
                 last_alert_ts = now
+                low_balance_observed = True
+
+            if low_balance_observed and last_balance is not None and bal >= thr and bal > last_balance:
+                save_balance_replenishment(
+                    prev_balance=last_balance,
+                    new_balance=bal,
+                    threshold=thr,
+                    currency=cur,
+                    monthly_rent=monthly_rent,
+                    user_count=users_count,
+                    recommended_topup=recommended_topup,
+                )
+                low_balance_observed = False
+
+            last_balance = bal
 
         except Exception as e:
             pass

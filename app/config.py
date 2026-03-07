@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     SERVSPACE_API_BASE: str = "https://api.serverspace.ru"
 
     LOW_BALANCE_THRESHOLD: float = 300.0
+    MONTHLY_RENT_COST: float = 3000.0
     BALANCE_CHECK_EVERY_SECONDS: int = 300
 
 settings = Settings()
