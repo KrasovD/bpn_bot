@@ -2,8 +2,6 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from pathlib import Path
-
 DB_PATH = Path("/app/data/bot.db")
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -26,6 +24,19 @@ def init_db() -> None:
             used_at TEXT
         )
         """)
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS balance_replenishments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prev_balance REAL NOT NULL,
+            new_balance REAL NOT NULL,
+            threshold REAL NOT NULL,
+            currency TEXT,
+            monthly_rent REAL NOT NULL,
+            user_count INTEGER NOT NULL,
+            recommended_topup REAL NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """)
         con.commit()
 
 def add_user(chat_id: int, role: str) -> None:
@@ -45,6 +56,13 @@ def list_users() -> list[dict]:
     with closing(sqlite3.connect(DB_PATH)) as con:
         cur = con.execute("SELECT chat_id, role, added_at FROM users ORDER BY added_at DESC")
         return [{"chat_id": r[0], "role": r[1], "added_at": r[2]} for r in cur.fetchall()]
+
+
+def get_users_count() -> int:
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute("SELECT COUNT(*) FROM users")
+        row = cur.fetchone()
+        return int(row[0] if row else 0)
 
 def remove_user(chat_id: int) -> None:
     with closing(sqlite3.connect(DB_PATH)) as con:
@@ -87,3 +105,34 @@ def use_invite(token: str, used_by: int, now_ts: int) -> dict | None:
         )
         con.execute("COMMIT")
         return {"token": _token, "role": role, "expires_at": int(expires_at)}
+
+
+def save_balance_replenishment(
+    *,
+    prev_balance: float,
+    new_balance: float,
+    threshold: float,
+    currency: str,
+    monthly_rent: float,
+    user_count: int,
+    recommended_topup: float,
+) -> None:
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        con.execute(
+            """
+            INSERT INTO balance_replenishments(
+                prev_balance, new_balance, threshold, currency,
+                monthly_rent, user_count, recommended_topup
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                prev_balance,
+                new_balance,
+                threshold,
+                currency,
+                monthly_rent,
+                user_count,
+                recommended_topup,
+            ),
+        )
+        con.commit()
